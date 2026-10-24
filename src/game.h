@@ -50,6 +50,7 @@ typedef struct {
     Vec3 flip_axis;
     float flip_remaining,flip_time;
     int flip_hit_available;
+    int upper_wall_sliding;
 } CarSurface;
 #define CONTACT_SPARKS 4
 #define CONTACT_SPARK_TIME .14f

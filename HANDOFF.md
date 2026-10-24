@@ -1,3 +1,72 @@
+# Resume here — v0.32 wheel contact during rollback candidate, October 23, 2026
+
+User clarified v0.31 “kinda worked” but the car falls off at the top; wants skateboard-like movement with wheels staying on the wall while sliding down, even with gas floored. v0.30 remains accepted hardware baseline. v0.31 was a partially successful trial, not accepted for contact feel. v0.32 is host-tested and awaits their real hardware test. No target compiler/emulator here and no ELF/CDI supplied.
+
+Build fresh Vectorball_DC_Wall_Slide_v0.32: make clean, make gdemu ->gdemu/01/disc.cdi. Same Makefile/PVR/dependencies, Input and Game layout (Game844host bytes, unchanged from v0.31).
+
+## Fix: separate support from driving traction
+
+v0.31 multiplied wall adhesion, body alignment, angular damping and steering torque by the same fading grip as tire drive. At a slip value.10 this left weak contact support, allowing a tumble/free fall. Restore full wall-contact support independently of tangential grip:
+
+- Wheel longitudinal/lateral forces still use surface_grip and slip cap.10, preserving the upper fade/anti-hover cutoff.
+- Average support is1 for actual non-ceiling wheel contacts,0 for ceiling normals.y<-.5. Adhesion10, angular damping10, normal alignment80, yaw tracking and manual wall steering use support instead of fading grip.
+- Keep existing probes/springs/collision integration. No pose snaps, artificial position locks or attachment without wheel contact. A real goal opening can naturally lose contact. B jump zeroes contact/forces and starts cooldown as before; full adhesion does not hold a deliberate jump in place.
+- Keep positive upward motor disabled while upper_wall_sliding. Move slip reset from30%arena height (~14.81) to chassis center<BANK_H+1 (4units). This keeps the engine from restarting an ascent halfway down while gas is floored; ordinary drive returns at the lower bank. No new state fields.
+
+Fade start/end and high-crest latch thresholds stay as v0.31 (40->78%H, latch above70%H or above45%H with vy<=.25). Positive upward air thrust remains suppressed while latched/near roof, avoiding ceiling pinning. Ball3.4375radius, aiming bias, speed caps, hit gains, boost usage, jumps/rolls/flips/recovery, lower wall/flat handling and matches unchanged. Straight head-on rollback can be backward with nose still up; angled carving/steering remains available.
+
+## Verification: contact retention, not merely descent
+
+Expanded upper_wall_test from64 to96fixtures: both humans, X/Z walls and both sides, normal/full boost, high uphill rest, high sideways run, max-speed upward near-roof approach, initial wall climb from12units, plus natural straight/angled approaches from the flat pitch at20units/s. Fuel replenished every physics tick so decline is not caused by tank depletion.
+
+During latched sliding, chassis center>BANK_H+3 (6units), actual solid wall, and after first6settling ticks: require>=2wheels, wall-normal alignment>.95 and wall gap<.5. Exclude the actual goal-opening/crossbar transition (end wall, |x|<GOAL_W+1.5, height<GOAL_H+2): there is no solid wall to hold onto there. Measured28,316retained-contact ticks, minimum alignment rounds.995, max wall gap.137units. Every fixture returns to center<4units with latch cleared within12seconds; worst5.71s. Finite positions, <1unit displacement/tick and max car speed checks retained.
+
+Regression demonstration: run the stricter contact check against preserved v0.31; it fails on boosted sideways wall descent at height24.44, tick170, one wheel contact, alignment.973 and gap.400. The revised support model passes. This catches the reported fall-away behavior that the old descent-only checks missed.
+
+Both ceiling/body-contact setups still drop with sustained boost. New high-wall jump/second-flip fixtures for both humans verify intentional B detaches with >8units/s wall-away velocity, earns one air charge and permits the next flip. Reset clears both slip flags. Full strict portable suite passed, including all prior wall/carving/steering/recovery/tilt/ball/aiming/controller/split/match/audio/camera checks. ASan/UBSan upper-wall fixtures passed with detect_leaks=0 (LeakSanitizer task inspection unsupported in runner).
+
+Repeat optional lower_wall_compare against v0.30, compiling current with -DUPPER_WALL to exclude new int.13fixtures*1200ticks=15,600ticks,13,041,600legacy bytes match exactly. SHA256 a06cdba75890e4082d76c9ff0010bbb868d72667657284431952be2239a64a6d. This is evidence for those host trajectories, not every input/compiler. Full results in SIMULATION_RESULTS.txt. No new hardware FPS claim.
+
+## Preview and next test
+
+Updated wall_grip_preview.c: blue starts on flat pitch15units from side wall,20units/s toward it; orange starts at80%H with wheel side facing opposite wall. Both hold throttle/boost with normal fuel depletion. Production game/match/split rendering, host chassis-tracking inspection cameras.8seconds640x48020fps offline encode; badge dashes. New WALL_SLIDE_PREVIEW.png visually checked. Other images/audio/render comparison are historical references. Runtime camera code unchanged.
+
+Hardware test: natural straight/angled ascent, full throttle/boost held through crest and rollback, wheels stay on solid wall, steering/brake/reverse on descent, jumping/flipping off the wall, bank exit/landings/recovery, both humans/cameras and versus FPS. User's feel judgement remains required. Separate P2 engine voice is still pending.
+
+---
+
+# Resume here — v0.31 upper-wall grip candidate, October 23, 2026
+
+**Accepted hardware baseline: v0.30.** User reported everything looks good on real hardware and accepted proposed upper-wall traction fade/ceiling-hanging fix. v0.31 is host-tested, awaiting their hardware feel/performance feedback. No target compiler/emulator here and no ELF/CDI supplied. Preserve v0.30 for comparison.
+
+Build fresh `Vectorball_DC_Wall_Grip_v0.31`: make clean, make gdemu ->gdemu/01/disc.cdi. Same Makefile/object list/dependencies and PVR configuration. CarSurface appends one upper_wall_sliding int; Game836->844host bytes. No Input changes. Existing memset reset clears the new state for both cars.
+
+## Implementation
+
+vehicle.c surface_grip(height,normal): full grip below.40*ARENA_HEIGHT (~19.75units) and on upward-facing normals>=.85. For higher steep contacts, t=clamp((height/H-.40)/.38,0,1), steep=clamp((.85-normal.y)/.50,0,1), grip=1-steep*t*t*(3-2*t). Full fade at.78H (~38.51). Ceiling normals.y<-.5 return0 at all heights.
+
+Per wheel multiply longitudinal force and lateral tire force by contact grip. Keep suspension/collision spring unchanged. Average contacted-wheel grip scales wheel-side adhesion, angular damping, normal-alignment/yaw assist and manual wall steering motor. Lower surfaces have factor1; collision response/probes/geometry remain active everywhere. No pose snapping or nonphysical position reset.
+
+A fade alone can leave an equilibrium where uphill motor balances gravity. New slip latch prevents that: on a steep wheel contact (normal.y<.7), latch when chassis center>.70H (~34.56), or center>.45H (~22.22) and vertical speed<=.25 (high crest/descending contact). While latched, steep-wheel grip is capped.10 and any motor component that would drive upward is disabled; downhill/horizontal motor remains available with reduced grip. Keep this state until chassis center<.30H (~14.81), including through loss of contact. This lets gravity bring it lower before full grip returns, rather than relatching/hovering at one height. Continuous throttle can begin another climb after the low reset. CPU/human/P2 all use shared solver.
+
+Airborne thrust keeps its horizontal component. Positive world-up component is zero while slipping; otherwise fades over roof clearance8->3units (ceiling-center.y), so a car cannot pin itself at the roof by losing wheel contact and immediately replacing uphill tire drive with air thrust. Ordinary low-altitude air control remains factor1. Jump impulses, flip/roll/recovery motors, ball3.4375radius/aiming/caps, acceleration, boost drain/refill, steering laws below fade and match flow unchanged. New per-contact math/state only; no new render geometry, allocations or sound channels.
+
+## Host evidence
+
+Full strict suite passed. New upper_wall_test includes production vehicle.c/helper and links game.c. Helper sampled through height for monotonic fade, full lower/floor grip and zero ceiling grip.64dynamic fixtures: both human slots, X/Z walls and both sides, normal/full boost, high resting uphill, high sideways, max-speed upward near-roof entry, and a lower-wall uphill approach. Boost reset full each tick, so descent cannot be attributed to empty fuel. Every fixture enters slip and returns with latch cleared below30% center height within12seconds; worst4.36seconds. Finite positions, <1unit steps and car speed cap retained. Two upside-down ceiling-wheel fixtures drop >5units while holding full boost/throttle. Reset clears both latches.
+
+Optional tests/lower_wall_compare.c compiles against preserved v0.30 and v0.31 (-DUPPER_WALL for new) to strip the appended int and compare all836legacy bytes each tick.13fixtures: one recentered flat drive/jump/roll run and12lower-wall coast/steering runs starting6/11/16units high. All centers checked below40%H throughout.1,200ticks each=15,600records,13,041,600bytes. Files byte-identical. SHA256 both: a06cdba75890e4082d76c9ff0010bbb868d72667657284431952be2239a64a6d. This covers the tested host trajectories, not every lower-wall interaction/compiler/platform.
+
+All accepted aiming/ball-size/flip/controller-input/double-jump/recovery/tilt/wall/carving/corner/CPU/split/match/menu/audio/camera/renderer tests passed; default render snapshots5016/2534triangles. ASan/UBSan upper-wall fixtures passed with detect_leaks=0 (LeakSanitizer task inspection unsupported in runner). Complete output in SIMULATION_RESULTS.txt. Last numeric versus34–39FPS feedback belongs to v0.26; user accepted v0.30 hardware without another number. No v0.31 hardware FPS claim.
+
+## Preview and next test
+
+New tests/wall_grip_preview.c uses production two-input simulation and split renderer: blue begins at12units/upward10units/s, orange at80%H/rest, both wall-oriented and holding throttle/boost with ordinary fuel depletion.8second640x48020fps offline encode; FPS badge dashes. Host inspection cameras follow chassis centers so falling/rotating cars stay visible; these are not production chase-camera recordings. New WALL_GRIP_PREVIEW.png visually checked. Other PNGs/audio/render comparison are historical references.
+
+Hardware focus: straight/angled/sideways high climbs under throttle/boost, no top/ceiling hanging, lower-wall carving retained, steering/brake/reverse during slide, upper-wall jumps/flips/landings and roof recovery, both humans/cameras and versusFPS. Falling may leave a rolled pose; accepted B recovery remains available. Tune fade start/end/crest thresholds after real feedback. Upper-wall work is now a candidate implementation; separate P2 engine audio remains pending.
+
+---
+
 # Resume here — v0.30 ball / aiming candidate, October 23, 2026
 
 **Accepted hardware baseline: v0.29.** User confirmed “it works now and works great on real hardware.” Requested another25% ball-size increase and finer/more accurate front-hit angles. v0.30 is host-tested and awaits their hardware feel/performance test. No target compiler/emulator here, no ELF/CDI supplied.

@@ -3,6 +3,8 @@ set -eu
 cd "$(dirname "$0")/.."
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Isrc src/game.c tests/upper_wall_test.c -lm -o "$work/upper_wall"
+"$work/upper_wall"
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Isrc src/vehicle.c tests/aiming_test.c -lm -o "$work/aiming"
 "$work/aiming"
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Isrc src/vehicle.c tests/flip_test.c -lm -o "$work/flip"

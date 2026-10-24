@@ -147,17 +147,33 @@ void vehicle_resolve(Vec3 *p,Vec3 *velocity,CarSurface *s){
         p->z=copysignf(ARENA_Z-.06f,p->z);if(p->z*velocity->z>0)velocity->z*=-.3f;
     }
 }
+/* Lower banks/walls retain full grip. High contact loses driving traction;
+   collision springs still keep the chassis outside solid geometry. */
+static float surface_grip(float height,Vec3 normal){
+    float t,steep;
+    if(normal.y<-.5f)return 0; /* No driven/adhesive ceiling contact. */
+    if(height<=ARENA_HEIGHT*.40f||normal.y>=.85f)return 1;
+    t=clamp((height/ARENA_HEIGHT-.40f)/.38f,0,1);
+    steep=clamp((.85f-normal.y)/.50f,0,1);
+    return 1-steep*t*t*(3-2*t);
+}
 void vehicle_step(Vec3 *p,Vec3 *velocity,float *heading,float *boost,int *jump_held,CarSurface *s,SoundEvents *sounds,float gain,Input in,float dt,int allow_air_roll){
     Vec3 center=add(*p,mul(s->up,.85f)),accel={0,-CAR_GRAVITY,0},torque={0,0,0};
     Vec3 right=unit(cross(s->up,s->forward)),average={0,0,0};
+    float support_sum=0,support=1;
     int i,count=0,burning=in.boost&&*boost>0&&in.throttle>0,was_grounded=s->grounded_wheels;
     initialize();s->cooldown=fmaxf(0,s->cooldown-dt);
+    /* Keep uphill drive off until the car reaches the lower bank, not mid-wall. */
+    if(center.y<BANK_H+1)s->upper_wall_sliding=0;
     for(i=0;i<4;i++){
         Vec3 origin=local_point(*p,s,(Vec3){i&1?1.10f:-1.10f,.77f,i&2?1.08f:-1.08f});
         WheelContact *hit=&s->wheels[i];vehicle_probe(origin,mul(s->up,-1),1.12f,hit);
         if(hit->hit&&s->cooldown<=0){
             Vec3 arm=sub(hit->point,center),v=point_velocity(*velocity,s,arm),n=hit->normal;
+            float contact_grip=surface_grip(center.y,n);
             float compression=.82f-hit->distance;
+            if(n.y<.7f&&(center.y>ARENA_HEIGHT*.70f||(center.y>ARENA_HEIGHT*.45f&&velocity->y<=.25f)))s->upper_wall_sliding=1;
+            if(s->upper_wall_sliding&&n.y<.7f)contact_grip=fminf(contact_grip,.10f);
             float spring=clamp(compression*160-dot(v,n)*8,0,100);
             Vec3 f=s->forward,lateral;float speed,side,motor,alignment;
             force_at(mul(n,spring),arm,&accel,&torque);
@@ -168,17 +184,19 @@ void vehicle_step(Vec3 *p,Vec3 *velocity,float *heading,float *boost,int *jump_h
             motor=clamp(in.throttle,-1,1)*(burning?BOOST_ACCEL:DRIVE_ACCEL)*.25f;
             if(speed>(burning?BOOST_SPEED:CAR_SPEED)&&motor>0)motor=0;
             if(speed< -10&&motor<0)motor=0;
+            if(s->upper_wall_sliding&&f.y*motor>0)motor=0;
             alignment=fmaxf(0,dot(n,s->up));alignment*=alignment;
             {float blend=clamp((n.y-.85f)/.15f,0,1);
                 float original=motor-speed*(in.brake>0?7:.65f)*.25f;
                 float floor_force=game_ground_force(speed,in,burning&&in.brake<=0,dt)*.25f;
-                force_at(mul(f,(original+blend*(floor_force-original))*alignment),arm,&accel,&torque);
+                force_at(mul(f,(original+blend*(floor_force-original))*alignment*contact_grip),arm,&accel,&torque);
             }
-            force_at(mul(lateral,clamp(-side*(.7f+1.3f*n.y*n.y),-22,22)*alignment),arm,&accel,&torque);
-            average=add(average,n);count++;
+            force_at(mul(lateral,clamp(-side*(.7f+1.3f*n.y*n.y),-22,22)*alignment*contact_grip),arm,&accel,&torque);
+            average=add(average,n);support_sum+=n.y<-.5f?0:1;count++;
         }
     }
     s->grounded_wheels=count;s->attached=count>0;
+    if(count)support=support_sum/count;
     if(!in.jump&&s->air_roll_active<0)s->air_roll_active=0;
     /* Roof/side resting on the flat floor: B gives world-up clearance, not an
        impulse along the inverted chassis up vector. Edge-triggered, no reset. */
@@ -199,9 +217,10 @@ void vehicle_step(Vec3 *p,Vec3 *velocity,float *heading,float *boost,int *jump_h
     if(count){
         s->flip_remaining=0;s->flip_time=0;s->flip_hit_available=0;
         if(allow_air_roll)s->air_jump_available=0;
-        /* Mild wheel-side adhesion keeps tire contacts against a wall. */
-        accel=add(accel,mul(s->up,-10));
-        torque=add(torque,mul(s->angular_velocity,-10));
+        /* Retain wheel-side hold and orientation support while tire traction slips.
+           Low driving grip must not turn a wall slide into a free fall. */
+        accel=add(accel,mul(s->up,-10*support));
+        torque=add(torque,mul(s->angular_velocity,-10*support));
         if(count>=2){
             Vec3 normal=unit(average),actual,target,plane_velocity;
             float forward_speed=dot(*velocity,s->forward),yaw_error;
@@ -242,14 +261,14 @@ void vehicle_step(Vec3 *p,Vec3 *velocity,float *heading,float *boost,int *jump_h
             s->contact_up=normal;s->contact_forward=unit(target);
             actual=unit(sub(s->forward,mul(normal,dot(s->forward,normal))));
             yaw_error=atan2f(dot(normal,cross(actual,target)),dot(actual,target));
-            torque=add(torque,mul(cross(s->up,normal),80));
-            torque=add(torque,mul(normal,yaw_error*65-dot(s->angular_velocity,normal)*4));
+            torque=add(torque,mul(cross(s->up,normal),80*support));
+            torque=add(torque,mul(normal,(yaw_error*65-dot(s->angular_velocity,normal)*4)*support));
             if(manual){
                 float yaw_rate=dot(s->angular_velocity,normal);
                 /* Player yaw replaces tire/assist yaw, retaining pitch/roll forces.
                    Apply a bounded rate motor; orientation still integrates normally. */
                 float command=(steering_rate-yaw_rate)*25+steering_rate*3.04f;
-                torque=add(torque,mul(normal,clamp(command,-65,65)-dot(torque,normal)));
+                torque=add(torque,mul(normal,(clamp(command,-65,65)-dot(torque,normal))*support));
             }
         }
         if(!was_grounded&&dot(*velocity,unit(average))< -2)sounds->land=fmaxf(sounds->land,-dot(*velocity,unit(average))*gain);
@@ -267,7 +286,11 @@ void vehicle_step(Vec3 *p,Vec3 *velocity,float *heading,float *boost,int *jump_h
             s->angular_velocity=(Vec3){0,0,0};s->cooldown=fmaxf(s->cooldown,.18f);
         }
         s->contact_frame_valid=0;s->wall_arc=0;
-        accel=add(accel,mul(s->forward,in.throttle*(burning?BOOST_ACCEL:DRIVE_ACCEL)*.25f));
+        {Vec3 thrust=mul(s->forward,in.throttle*(burning?BOOST_ACCEL:DRIVE_ACCEL)*.25f);
+            /* Upward air thrust cannot pin a sliding car or hold it at the roof. */
+            if(thrust.y>0)thrust.y*=s->upper_wall_sliding?0:clamp((ARENA_HEIGHT-center.y-3)/5,0,1);
+            accel=add(accel,thrust);
+        }
         if(allow_air_roll&&s->flip_time<=0&&s->air_roll_active>=0&&in.jump&&fabsf(in.steer)>.15f)s->air_roll_active=1;
         if(s->flip_time>0){
             /* Bounded pitch motor; brake near one full revolution. */

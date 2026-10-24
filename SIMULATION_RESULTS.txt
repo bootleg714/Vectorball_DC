@@ -1,6 +1,7 @@
-v0.30 portable host suite; no target/emulator/hardware test.
+v0.32 portable host suite; no target/emulator/hardware test.
 Command: sh tests/run.sh
 
+PASS: 28316 upper slide ticks retain >=2 wheels, alignment>=0.995 and wall gap<=0.137; monotonic upper-wall grip, full lower/floor grip and zero ceiling grip; 96 human/wall/direction/boost fixtures return to the lower bank (worst5.71s), no depleted-tank dependency, bounded motion/reset both ceiling drops and intentional high-wall jump/flip releases
 PASS: 8968 distinct monotonic frontal shot angles across both cars/four headings; 5-degree contact -> 3.25-degree shot, mirrored aiming, unchanged impulse strength, center/side/rear response
 PASS: 16 player/direction/heading flips, inverted midpoint/upright completion <=0.91s, held steering priority, landing/recharge/reset; +10% ordinary hits, single +15% flip hit, separating/rotating swat and ball cap
 PASS: both players/directions roll 7.50 rad/s, >one rotation in 1s, release below .15 rad/s in .2s and counter-roll; slow yaw unchanged, normal/boost radii 20.64/54.91 (v0.27 radii retained); speed caps +10% 37.39/61.00
@@ -60,5 +61,7 @@ snapshot: 5016 triangles with finite coordinates
 snapshot: 2534 triangles with finite coordinates
 PASS: portable renderer compiled and submitted finite triangles
 
-ASan/UBSan passed: aiming_test and scale_speed_test; ASAN_OPTIONS=detect_leaks=0 (LeakSanitizer task inspection unsupported in runner).
-Preview verified:640x480,7.500seconds,20fps offline encode, not measured game FPS.
+ASan/UBSan upper_wall_test passed, ASAN_OPTIONS=detect_leaks=0 (LeakSanitizer task inspection unsupported in runner).
+Lower-wall/flat comparison with v0.30 passed:15,600ticks,13,041,600legacy bytes; SHA256 a06cdba75890e4082d76c9ff0010bbb868d72667657284431952be2239a64a6d.
+Old v0.31 failed the added retention check: boosted sideways slide,24.44height,1wheel contact at tick170.
+Preview verified:640x480,8seconds,20fps offline encoding with host inspection cameras; not measured game FPS.
