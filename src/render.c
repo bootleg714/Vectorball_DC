@@ -214,6 +214,10 @@ static float neon_width(Vec3 p,Vec3 t,Vec3 n,float base){
    its ends give (up to three levels, so extra pieces appear only near the
    camera). An optional dim halo (at least 2.4x the core) is drawn first. */
 #define NEON_MAX_PIECES 48
+#ifdef NEON_WIDTH_CHECK
+/* Host-only hook (tests/neon_width_test.c): view depth, needed and drawn width at each piece's middle. */
+void neon_width_check(float depth,float needed,float drawn,float base);
+#endif
 static void neon_strip(Vec3 a,Vec3 b,Vec3 n,float base,int centred,int pieces,uint32_t col,float halo_base,uint32_t halo_col){
     Vec3 pt[NEON_MAX_PIECES+1];float w[NEON_MAX_PIECES+1];unsigned char level[NEON_MAX_PIECES+1];int count=0,j,pass;
     Vec3 t=norm(sub(b,a));
@@ -229,6 +233,9 @@ static void neon_strip(Vec3 a,Vec3 b,Vec3 n,float base,int centred,int pieces,ui
     }
     for(pass=halo_base>0?0:1;pass<2;pass++)for(j=0;j+1<count;j++){
         float w0=w[j],w1=w[j+1];
+#ifdef NEON_WIDTH_CHECK
+        if(pass)neon_width_check(view(mul(add(pt[j],pt[j+1]),.5f)).z,neon_width(mul(add(pt[j],pt[j+1]),.5f),t,n,base),(w0+w1)*.5f,base);
+#endif
         if(!pass){w0=fmaxf(halo_base,w0*2.4f);w1=fmaxf(halo_base,w1*2.4f);}
         {float lo0=centred?-w0*.5f:0,hi0=centred?w0*.5f:w0,lo1=centred?-w1*.5f:0,hi1=centred?w1*.5f:w1;
             quad(add(pt[j],mul(n,lo0)),add(pt[j+1],mul(n,lo1)),add(pt[j+1],mul(n,hi1)),add(pt[j],mul(n,hi0)),pass?col:halo_col);}

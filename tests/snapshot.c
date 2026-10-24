@@ -30,7 +30,11 @@ void backend_triangle(Screen a,Screen b,Screen c,uint32_t col){
     for(y=y0;y<=y1;y++)for(x=x0;x<=x1;x++){
         float u=edge(b,c,x+.5f,y+.5f)/area,w=edge(a,b,x+.5f,y+.5f)/area,t=1-u-w;
         float z=u*a.z+t*b.z+w*c.z;
+#ifdef ARENA_VIEWS_DEPTH_ALWAYS
+        if(u>=0&&t>=0&&w>=0&&(render_depth_always||z>=depth[y][x])){ /* PVR depth-ALWAYS marking pass */
+#else
         if(u>=0&&t>=0&&w>=0&&z>=depth[y][x]){
+#endif
             depth[y][x]=z;rgb[y][x][0]=(col>>16)&255;rgb[y][x][1]=(col>>8)&255;rgb[y][x][2]=col&255;
         }
     }

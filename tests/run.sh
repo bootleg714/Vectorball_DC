@@ -71,3 +71,10 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Isrc src/game.c src/vehicle.c s
 "$work/snapshot" > "$work/frame.ppm"
 "$work/snapshot" corner > "$work/corner.ppm"
 printf 'PASS: portable renderer compiled and submitted finite triangles\n'
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -DNEON_WIDTH_CHECK -Isrc src/game.c src/vehicle.c src/match.c src/render.c tests/neon_width_test.c -lm -o "$work/neon_width"
+"$work/neon_width"
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Isrc src/game.c src/vehicle.c src/match.c src/render.c tests/versus_hash.c -lm -o "$work/versus_hash"
+"$work/versus_hash"
+cc -std=c99 -O2 -Wall -Wextra -Werror -Isrc -Itests src/game.c src/vehicle.c src/match.c src/render.c tests/arena_views.c -lm -o "$work/arena_views"
+"$work/arena_views" "$work" 2>/dev/null
+printf 'PASS: arena preview views rendered\n'

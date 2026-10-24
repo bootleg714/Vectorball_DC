@@ -1,47 +1,71 @@
-# Resume here — neon line dropout fix, October 23, 2026
+# Resume here — neon vector arena accepted on hardware; next: more arena themes (October 23, 2026)
 
-After the depth-ALWAYS fix the user still saw lines blink: distant lines invisible until they drove closer, then on/off (hardware screenshots show dotted far lines). Not z-fighting this time: the lines were 0.10–0.35 units wide, i.e. thinner than a pixel at distance, and the PVR (no anti-aliasing) only fills pixels whose centres a triangle covers, so sub-pixel strips drop in and out as the camera moves.
+## Status
 
-- `neon_width(p,t,n,base)` returns the width needed for the strip to be NEON_MIN_PIXELS (1.6) thick on screen: it projects p, p+n*e and p+t*e and measures the across-strip pixel distance perpendicular to the strip's own screen direction (a 3D angle estimate was tried first and gave only 1.0 px off-centre). Never below the design width; capped at NEON_MAX_WIDTH 6.
-- `neon_strip()` draws a line as tapered pieces with per-end widths, adaptively halving any piece whose midpoint needs >12% more width than its ends give (max 3 levels, max 48 pieces). `neon_ring()` does the same for the centre ring. Halo = max(design halo, 2.4x core).
-- Applied to everything thin in the single-screen dress: grid, midfield line, centre ring and hexagon, goal-area lines and goal lines, bank toe lines, wall neon band and top rail, net slats, end-wall goal frames, terrace lips. Chevrons and filled shapes were already wide enough.
-- Check (scratch harness, render.c instrumented): 2,000 random cameras, 290,274 widened pieces; thinnest mid-piece 1.22 px, none below 1.2 px. Before adaptive splitting 0.30% fell below 1.2 px (thinnest 0.81).
-- Triangles: single-screen kickoff 5911 (was 5649 with fixed-width lines; original grass arena 5016), 702 in the depth-ALWAYS run; corner snapshot 2666. Versus hash fixture unchanged (1,341,200 triangles, same hash, 0 flagged). Full suite 33 PASS.
-- Hardware confirmation pending.
+- Branch `neon-arena` (pushed to origin). Not merged into `main` yet: merge it, or keep working on it, at the start of the next session (ask the user). `main` = v0.32 wall-slide build.
+- **Accepted on real hardware** by the user: "looks great now, works nice on real hardware too. Didn't notice any fps [drop]" (single screen). Versus was deliberately left untouched (see constraints).
+- Render-only work: `src/render.c` (plus a small header switch in `src/main.c`). No gameplay, physics, collision, camera, HUD, menu or audio changes.
 
----
+## Next: more arena themes (user wants these in the next chat)
 
-# Resume here — neon arena floor-line flicker fix, October 23, 2026
+The user picked "Neon vector arena" from three proposed looks and now wants the other two as well:
 
-User built the neon-arena branch and likes the arena, but the floor lines flickered quite a bit on hardware (z-fighting: strips only .018–.06 above the floor, reciprocal depth at grazing distance). Fix by draw order rather than larger height offsets:
+1. **Night stadium**: keep a grass pitch but make it a big event: striped mowing, team-coloured ends, LED ad boards along the walls, crowd stands with lights, light towers.
+2. **Futuristic outdoor**: daytime or sunset sky, a rooftop arena over a city or a desert with mountains, metal wall panels and painted markings.
 
-- Single screen only: straight after the floor tiles, every floor marking (grid, goal-area tints and outlines, goal lines, midfield line, centre ring/hexagon/chevrons, bank toe lines, car/ball shadows) is drawn in one run with `render_depth_always=1`. Then banks, walls, goals, cars, ball and effects draw with the normal header and still depth-test against the markings, so they cover them.
-- `main.c` compiles a second opaque header (`decal_header`, `PVR_DEPTHCMP_ALWAYS`, depth write on) and `backend_triangle` switches headers only when the flag changes (resets to the normal header each frame). Same OP list, so no extra list or bin config. The opaque list is processed in submission order, so depth-ALWAYS markings simply paint over the tiles.
-- Safe because the camera stays inside the convex arena footprint: no environment geometry drawn before the floor can sit in front of a floor marking. The goal floor rect inside each goal stays in the normal pass (nothing beneath it to fight).
-- Versus: flag never set; the 400-frame split hash fixture still gives 1,341,200 triangles, identical hash, 0 flagged triangles. Host test stubs gained `render_depth_always` (three loop tests that replace render.c) and `depth`/`PVR_DEPTHCMP_ALWAYS` in tests/title_stubs/dc/pvr.h. Full suite passes (33 PASS lines); kickoff 5649 triangles, 538 of them in the depth-always run.
-- Host renders with a reference rasteriser that honours depth-ALWAYS for flagged triangles show correct layering (cars/ball/banks/goals over markings). Hardware confirmation of the flicker fix still needed.
+Questions to settle with the user before or while building (ask; do not assume):
+- How an arena is chosen: a menu option before a match, rotating per match, random, or per mode. Keep menus clear and short (AGENTS.md).
+- Whether the original plain grass arena stays as an option.
+- Whether versus gets a theme at all. Default: **no**. Versus keeps the exact accepted arena unless the user explicitly asks; any versus change must keep the split triangle count at or below today's.
 
----
+Suggested structure: pull the single-screen dress into a theme layer, e.g. an `ArenaTheme` struct (sky gradient, pitch colours, bank colours, accent/neon colours, environment and decoration callbacks), selected by a value carried from the frontend (store it outside `Game` if possible, so `Game` layout and gameplay comparisons stay unchanged). Keep the shared arena geometry (`arena_edge`, `arena_bank_vertex`, goals) and only vary colours and decorations. Build one theme at a time and show the user host previews (`tests/arena_views.c`) before a hardware build.
 
-# Resume here — neon vector arena (single screen), October 23, 2026
+## Constraints (keep)
 
-User asked to spice up the generic test arena and chose a "neon vector arena" look. Mid-task they added: **leave the versus (split-screen) arena as is — it runs 34–39 FPS on hardware.** So every change is single-screen only (`viewport_height==480`); split views take the exact previous code paths and colours.
+- **Versus/split screen must stay as is**: it runs 34–39 FPS on hardware. Every neon change is inside `viewport_height==480` branches; split views take the previous code paths, colours and submission order. Check with `tests/versus_hash.c`: it must print `1341200 triangles, hash 4feeeda6e297f213, depth-always 0` (host gcc; if the toolchain differs, compare against a build of the previous `render.c` instead).
+- One opaque PVR list, flat vertex colours, no textures, no translucency. Glow = bright thin core strip over a wider dim halo strip.
+- Single-screen budget: kickoff snapshot was 5016 triangles (grass) and is 5911 now; the user saw no FPS drop at 5911. Report the count for any new theme; keep new themes in the same range.
+- Draw floor markings in the depth-ALWAYS pass (below) and thin lines with `neon_strip()` (below), or they will flicker on hardware.
 
-Render-only change in `src/render.c`; no gameplay, physics, collision, camera or HUD changes. Still one opaque PVR list, flat colours, no textures or translucency. Glow is faked with a bright thin core strip over a wider dim halo strip.
+## What the neon arena contains (single screen)
 
-- Pitch: dark team-tinted halves (navy at the blue end, -z; plum at the orange end, +z) on the same 8x14 tiles.
-- Glowing vector grid: 11 long lines (blue/orange per half) and 13 cross lines, core plus halo.
-- Midfield line and centre emblem: white core over a purple halo, a glowing ring, a cyan hexagon and two team chevrons pointing at the goal each team attacks.
-- Banks: dark steel, lighter towards the lip. A neon toe line where pitch meets bank, a neon band on the wall above the lip and a neon top rail. Long edges are split so the colour runs blue -> magenta -> orange along the arena (`neon_at(z)`). Fence wires recoloured.
-- Goals: darker team-tinted nets with three glowing slats, team-coloured goal-area outlines, and a big neon frame with three stacked chevrons on the end wall just outside the playing surface (z = ±(ARENA_Z+.45), behind the bank).
-- Sky and city: purple horizon gradient, a striped synthwave sun low behind the orange end (replaces the moon), darker buildings with magenta/cyan windows, neon lips on the terraces, team-coloured spire tops. Car/ball floor shadows darker to suit the dark pitch.
+- Pitch: dark team-tinted halves (navy at the blue end, -z; plum at the orange end, +z) on the same 8x14 tiles; glowing grid (11 long, 13 cross lines, blue/orange per half).
+- Midfield line (white core, purple halo), centre ring, cyan hexagon, two team chevrons pointing at the goal each team attacks.
+- Banks: dark steel, lighter towards the lip. Neon toe line where the pitch meets each bank, neon band on the wall above the lip, neon top rail; colour runs blue -> magenta -> orange along the arena (`neon_at(z)`); fence wires recoloured.
+- Goals: darker team-tinted nets with three glowing slats, team-coloured goal-area lines and goal lines, big neon frame with three stacked chevrons on the end wall just outside the playing surface (z = +/-(ARENA_Z+.45)).
+- Sky/city: purple horizon gradient, striped synthwave sun low behind the orange end (replaced the moon), darker buildings with magenta/cyan windows, neon terrace lips, team-coloured spire tops, darker car/ball floor shadows.
+- `NEON_ARENA_PREVIEW.png`: host renders of the final version (kickoff, overview, goal, centre); regenerate with `tests/arena_views.c`.
 
-Host evidence (no Dreamcast compiler/emulator here; no hardware FPS claim):
-- Split screen unchanged: a 400-frame versus hash fixture (8 car/ball/camera layouts, pause overlay, FPS label) submits 1,341,200 triangles with an identical FNV-1a hash of every vertex and colour on the old (4ad39a2) and new render.c.
-- Full strict `tests/run.sh` passes (33 PASS lines, same as before). Single-screen kickoff snapshot 5016 -> 5649 triangles (+633, ~13%); corner snapshot 2534 -> 2654. Other single views: centre 3695 -> 4202, side 3634 -> 4162, goal 3155 -> 3448.
-- `NEON_ARENA_PREVIEW.png`: host software renders (kickoff, overview, goal, centre). Host rasteriser aliasing makes thin lines look dashed at a distance; hardware should draw them solid.
+## Problems found on hardware and how they were fixed
 
-Hardware test: single-player/CPU matches on GDEMU/Redream — check the look, readability of the ball and cars against the dark pitch, that no strips flicker against the floor (they sit .018–.06 above it), and single-screen FPS. Versus should look and run exactly as before.
+1. **Floor lines z-fighting (flicker).** Strips sat .018–.06 above the floor; at distance and grazing angles the reciprocal depth could not separate them, so they flickered (Redream and GDEMU). Raising them would make them float. Fix by draw order:
+   - Straight after the floor tiles, every floor marking (grid, goal tints, goal-area/goal lines, midfield, centre emblem, toe lines, car/ball shadows) is drawn with `render_depth_always=1`.
+   - `main.c` compiles a second opaque header `decal_header` (`PVR_DEPTHCMP_ALWAYS`, depth write on); `backend_triangle` switches headers only when the flag changes and resets to the normal header each frame. Same OP list (the PVR processes the opaque list in submission order), so markings paint over the tiles, and banks/goals/cars/ball drawn afterwards still depth-test over the markings.
+   - Safe because the camera stays inside the convex arena footprint, so nothing drawn before the floor (sky, city, stands) can be in front of a floor marking. The goal floor inside each goal stays in the normal pass (nothing below it to fight).
+   - `render_depth_always` is defined in `render.c`, declared in `render.h`; host backends ignore it. Three loop tests that replace render.c define it, and `tests/title_stubs/dc/pvr.h` gained `depth` and `PVR_DEPTHCMP_ALWAYS`.
+2. **Distant lines blinking in and out.** After fix 1, far lines were still dotted and popped on/off while driving. Cause: lines 0.10–0.35 units wide are thinner than a pixel at distance, and the PVR (no anti-aliasing) only fills pixels whose centres a triangle covers. Fix:
+   - `neon_width(p,t,n,base)` returns the width needed to be `NEON_MIN_PIXELS` (1.6) thick on screen. It projects p, p+n*e and p+t*e and measures the across-strip pixel distance perpendicular to the strip's own screen direction. A first version using the 3D angle to the view ray gave only 1.0 px off-centre (and still dropped out); the screen-space measure fixed that. Never below the design width; capped at `NEON_MAX_WIDTH` 6.
+   - `neon_strip(a,b,n,base,centred,pieces,col,halo_base,halo_col)` draws a line as tapered pieces with per-end widths and adaptively halves any piece whose midpoint needs >12% more width than its ends give (max 3 levels, max 48 pieces), so extra pieces appear only near the camera. `neon_ring()` does the same for the centre ring. Halo = max(design halo, 2.4x core).
+   - Used for every thin item: grid, midfield, ring, hexagon, goal-area/goal lines, toe lines, wall band, top rail, net slats, goal frames, terrace lips.
+   - Result: across 2000 random cameras no widened piece is under 1.2 px at its middle (thinnest 1.22). Adaptive splitting also cut triangles (6391 with fixed pieces -> 5911).
+
+## Lessons for future arena work
+
+- Anything flat on the floor: draw it in the depth-ALWAYS run right after the tiles, never as a raised coplanar strip.
+- Anything thinner than ~2 px at its farthest visible distance (lines, rails, trims, wires): use `neon_strip()`. Fixed thin quads will shimmer on hardware even if host renders look fine at a glance.
+- Large distant shapes (sun, buildings) are fine as plain quads.
+- Measure before claiming: the triangle-stream hash for versus, the width test for lines, triangle counts for budget.
+- Show the user host previews before a hardware build; it saved a round trip when picking colours (orange half changed from brown to plum).
+
+## Tools and checks added (all in `tests/run.sh`, which now prints 35 PASS lines)
+
+- `tests/neon_width_test.c` (build with `-DNEON_WIDTH_CHECK`; uses a small `#ifdef` hook in `neon_strip`): asserts the 1.2 px minimum over 2000 cameras.
+- `tests/versus_hash.c`: versus triangle-stream hash and depth-ALWAYS count (see constraints for the expected line).
+- `tests/arena_views.c`: writes kickoff/overview/goal/side/center/low/split PPMs to a folder, with a reference rasteriser that honours the depth-ALWAYS pass (`-DARENA_VIEWS_DEPTH_ALWAYS` path in `tests/snapshot.c`). Example:
+  `cc -std=c99 -O2 -Isrc -Itests src/game.c src/vehicle.c src/match.c src/render.c tests/arena_views.c -lm -o arena_views && ./arena_views out/` (convert PPM to PNG to view). Host output has no anti-aliasing and is not a Dreamcast FPS measure.
+- Snapshot counts now: kickoff 5911, corner 2666 triangles.
+
+Build is unchanged: `make clean`, `make gdemu` -> `gdemu/01/disc.cdi`. No ELF/CDI committed.
 
 ---
 
