@@ -188,22 +188,62 @@ static uint32_t neon_at(float z){
     return t<0?mix_colour(NEON_PINK,NEON_BLUE,-t):mix_colour(NEON_PINK,NEON_ORANGE,t);
 }
 static void floor_strip(float x,float z,float w,float d,float y,uint32_t col){quad(v(x-w,y,z-d),v(x+w,y,z-d),v(x+w,y,z+d),v(x-w,y,z+d),col);}
-/* Axis-aligned glowing floor line; the halo is skipped in split views. */
-static void neon_floor_line(float x,float z,float w,float d,uint32_t col){
-    int lateral=w>d;
-    if(viewport_height==480)floor_strip(x,z,lateral?w:w+.30f,lateral?d+.30f:d,.018f,shade(col,.28f));
-    floor_strip(x,z,w,d,.026f,col);
+/* A strip between two points on the floor, width w to the left of travel. */
+/* The PVR has no anti-aliasing and only fills pixels whose centres a triangle
+   covers, so a strip thinner than a pixel blinks in and out as the camera moves.
+   neon_width() keeps a strip at least NEON_MIN_PIXELS thick on screen: its design
+   width up close, wider with distance and at grazing angles. It projects p, a
+   small step across the strip (n) and a small step along it (t), and measures
+   the across-strip distance perpendicular to the strip's own screen direction. */
+#define NEON_MIN_PIXELS 1.6f
+#define NEON_MAX_WIDTH 6.0f
+static float neon_width(Vec3 p,Vec3 t,Vec3 n,float base){
+    const float e=.01f;float f=cam.focal>0?cam.focal:390,ax,ay,nx,ny,tx,ty,lt,px;
+    Vec3 a=view(p),b=view(add(p,mul(n,e))),c=view(add(p,mul(t,e)));
+    if(a.z<.3f||b.z<.3f||c.z<.3f)return base;      /* at/behind the near plane: clipped anyway */
+    ax=f*a.x/a.z;ay=f*a.y/a.z;
+    nx=f*b.x/b.z-ax;ny=f*b.y/b.z-ay;tx=f*c.x/c.z-ax;ty=f*c.y/c.z-ay;
+    lt=sqrtf(tx*tx+ty*ty);
+    px=lt>1e-6f?fabsf(nx*ty-ny*tx)/lt:sqrtf(nx*nx+ny*ny);  /* pixels per e units of width */
+    if(px<1e-6f)return NEON_MAX_WIDTH;
+    return fmaxf(base,fminf(NEON_MIN_PIXELS*e/px,NEON_MAX_WIDTH));
 }
-/* Flat ring on the floor between two radii. */
-static void floor_ring(float r0,float r1,float y,int steps,uint32_t col){
-    int k;for(k=0;k<steps;k++){
-        float a=k*6.2831853f/steps,b=(k+1)*6.2831853f/steps;
-        quad(v(sinf(a)*r0,y,cosf(a)*r0),v(sinf(b)*r0,y,cosf(b)*r0),v(sinf(b)*r1,y,cosf(b)*r1),v(sinf(a)*r1,y,cosf(a)*r1),col);
+/* A neon strip from a to b, width along n: centred on the line, or growing from
+   it towards +n. Drawn as tapered pieces so the width follows distance: start
+   with `pieces`, then halve any piece whose midpoint needs >12% more width than
+   its ends give (up to three levels, so extra pieces appear only near the
+   camera). An optional dim halo (at least 2.4x the core) is drawn first. */
+#define NEON_MAX_PIECES 48
+static void neon_strip(Vec3 a,Vec3 b,Vec3 n,float base,int centred,int pieces,uint32_t col,float halo_base,uint32_t halo_col){
+    Vec3 pt[NEON_MAX_PIECES+1];float w[NEON_MAX_PIECES+1];unsigned char level[NEON_MAX_PIECES+1];int count=0,j,pass;
+    Vec3 t=norm(sub(b,a));
+    for(j=0;j<=pieces;j++){pt[j]=add(a,mul(sub(b,a),(float)j/pieces));w[j]=neon_width(pt[j],t,n,base);level[j]=0;}
+    count=pieces+1;
+    /* Refine in place: insert midpoints where linear width falls short. */
+    for(j=0;j+1<count;){
+        Vec3 pm=mul(add(pt[j],pt[j+1]),.5f);float wm=neon_width(pm,t,n,base);
+        if(level[j+1]<3&&count<NEON_MAX_PIECES+1&&wm>(w[j]+w[j+1])*.5f*1.12f){
+            int k;for(k=count;k>j+1;k--){pt[k]=pt[k-1];w[k]=w[k-1];level[k]=level[k-1];}
+            pt[j+1]=pm;w[j+1]=wm;level[j+1]=(unsigned char)(level[j+2]+1);level[j+2]=level[j+1];count++;
+        }else j++;
+    }
+    for(pass=halo_base>0?0:1;pass<2;pass++)for(j=0;j+1<count;j++){
+        float w0=w[j],w1=w[j+1];
+        if(!pass){w0=fmaxf(halo_base,w0*2.4f);w1=fmaxf(halo_base,w1*2.4f);}
+        {float lo0=centred?-w0*.5f:0,hi0=centred?w0*.5f:w0,lo1=centred?-w1*.5f:0,hi1=centred?w1*.5f:w1;
+            quad(add(pt[j],mul(n,lo0)),add(pt[j+1],mul(n,lo1)),add(pt[j+1],mul(n,hi1)),add(pt[j],mul(n,hi0)),pass?col:halo_col);}
     }
 }
-/* A strip between two points on the floor, width w to the left of travel. */
-static void floor_band(Vec3 a,Vec3 b,Vec3 inward,float w,float y,uint32_t col){
-    Vec3 A=v(a.x,y,a.z),B=v(b.x,y,b.z);quad(A,B,add(B,mul(inward,w)),add(A,mul(inward,w)),col);
+/* Floor ring of radius r with distance-aware width (and optional halo). */
+static void neon_ring(float r,float base,int steps,uint32_t col,float halo_base,uint32_t halo_col){
+    int k,pass;
+    for(pass=halo_base>0?0:1;pass<2;pass++)for(k=0;k<steps;k++){
+        float a=k*6.2831853f/steps,b=(k+1)*6.2831853f/steps;
+        Vec3 na=v(sinf(a),0,cosf(a)),nb=v(sinf(b),0,cosf(b)),pa=mul(na,r),pb=mul(nb,r);
+        float wa=neon_width(pa,v(na.z,0,-na.x),na,base),wb=neon_width(pb,v(nb.z,0,-nb.x),nb,base);
+        if(!pass){wa=fmaxf(halo_base,wa*2.4f);wb=fmaxf(halo_base,wb*2.4f);}
+        quad(add(pa,mul(na,-wa*.5f)),add(pb,mul(nb,-wb*.5f)),add(pb,mul(nb,wb*.5f)),add(pa,mul(na,wa*.5f)),pass?col:halo_col);
+    }
 }
 static void night_sky(void){
     /* Neon dress is single-screen only: versus keeps the accepted arena exactly (frame-rate budget). */
@@ -304,8 +344,8 @@ static void stadium_environment(void){
             box(sx,0,0,1,h,ARENA_Z+3,seat);
             box(0,0,ez,ARENA_X+7,h,1,seat);
             /* Neon lip along each terrace edge, team-tinted on the end stands. */
-            quad(v(sx-side*1.02f,h-.22f,-ARENA_Z-3),v(sx-side*1.02f,h-.22f,ARENA_Z+3),v(sx-side*1.02f,h,ARENA_Z+3),v(sx-side*1.02f,h,-ARENA_Z-3),tier==1?NEON_PINK:0xff6b3fa8);
-            quad(v(-ARENA_X-7,h-.22f,ez-side*1.02f),v(ARENA_X+7,h-.22f,ez-side*1.02f),v(ARENA_X+7,h,ez-side*1.02f),v(-ARENA_X-7,h,ez-side*1.02f),side>0?NEON_ORANGE:NEON_BLUE);
+            neon_strip(v(sx-side*1.02f,h,-ARENA_Z-3),v(sx-side*1.02f,h,ARENA_Z+3),v(0,-1,0),.22f,0,6,tier==1?NEON_PINK:0xff6b3fa8,0,0);
+            neon_strip(v(-ARENA_X-7,h,ez-side*1.02f),v(ARENA_X+7,h,ez-side*1.02f),v(0,-1,0),.22f,0,5,side>0?NEON_ORANGE:NEON_BLUE,0,0);
         }
         /* End mesh starts above the crossbar, leaving both goal mouths clear. */
         fence_panel(0,side*ARENA_Z,-GOAL_W,GOAL_W,GOAL_H+.55f,WALL_TOP);
@@ -627,13 +667,14 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
     {int i,lines_x=12,lines_z=14;
         for(i=1;i<lines_x;i++){
             float x=-ARENA_X+i*(2*ARENA_X/lines_x);
-            neon_floor_line(x,-ARENA_Z*.5f,.05f,ARENA_Z*.5f,0xff1f4f9c);
-            neon_floor_line(x,ARENA_Z*.5f,.05f,ARENA_Z*.5f,0xff9c4a1f);
+            neon_strip(v(x,0,-ARENA_Z),v(x,0,0),v(1,0,0),.10f,1,2,0xff1f4f9c,.70f,shade(0xff1f4f9c,.28f));
+            neon_strip(v(x,0,0),v(x,0,ARENA_Z),v(1,0,0),.10f,1,2,0xff9c4a1f,.70f,shade(0xff9c4a1f,.28f));
         }
         for(i=1;i<lines_z;i++){
             float z=-ARENA_Z+i*(2*ARENA_Z/lines_z);
             if(fabsf(z)<1)continue;
-            neon_floor_line(0,z,ARENA_X,.05f,z<0?0xff1f4f9c:0xff9c4a1f);
+            uint32_t col=z<0?0xff1f4f9c:0xff9c4a1f;
+            neon_strip(v(-ARENA_X,0,z),v(ARENA_X,0,z),v(0,0,1),.10f,1,2,col,.70f,shade(col,.28f));
         }
     }
     for(k=-1;k<=1;k+=2){
@@ -641,13 +682,11 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
         quad(v(-GOAL_W-3,.01f,edge),v(GOAL_W+3,.01f,edge),v(GOAL_W+3,.01f,edge-k*8),v(-GOAL_W-3,.01f,edge-k*8),tint);
     }
     /* Midfield line and centre emblem: ring, hexagon and two team chevrons. */
-    floor_strip(0,0,ARENA_X,.55f,.03f,0xff4a1a5e);
-    floor_strip(0,0,ARENA_X,.12f,.04f,0xfff4eaff);
-    floor_ring(9.55f,10.75f,.03f,32,0xff4a1a5e);
-    floor_ring(10,10.25f,.045f,32,0xfff4eaff);
+    neon_strip(v(-ARENA_X,0,0),v(ARENA_X,0,0),v(0,0,1),.24f,1,2,0xfff4eaff,1.1f,0xff4a1a5e);
+    neon_ring(10.12f,.25f,32,0xfff4eaff,1.2f,0xff4a1a5e);
     {int i;for(i=0;i<6;i++){
-            float a=i*1.0471976f+.5235988f,b=a+1.0471976f;
-            quad(v(sinf(a)*5.6f,.05f,cosf(a)*5.6f),v(sinf(b)*5.6f,.05f,cosf(b)*5.6f),v(sinf(b)*6.0f,.05f,cosf(b)*6.0f),v(sinf(a)*6.0f,.05f,cosf(a)*6.0f),0xff46e6ff);
+            float a=i*1.0471976f+.5235988f,b=a+1.0471976f,m=(a+b)*.5f;
+            neon_strip(v(sinf(a)*5.8f,0,cosf(a)*5.8f),v(sinf(b)*5.8f,0,cosf(b)*5.8f),v(sinf(m),0,cosf(m)),.40f,1,1,0xff46e6ff,0,0);
         }
         for(i=-1;i<=1;i+=2){
             /* Chevron pointing at the goal each team attacks. */
@@ -665,16 +704,16 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
             float t0=(float)j/pieces,t1=(float)(j+1)/pieces;
             Vec3 p0=add(toe0,mul(sub(toe1,toe0),t0)),p1=add(toe0,mul(sub(toe1,toe0),t1));
             uint32_t col=neon_at((a.z+(b.z-a.z)*(t0+t1)*.5f));
-            floor_band(p0,p1,inward,.85f,.03f,shade(col,.3f));
-            floor_band(p0,p1,inward,.22f,.04f,col);
+            p0.y=p1.y=0;
+            neon_strip(p0,p1,inward,.22f,0,1,col,.85f,shade(col,.3f));
         }
     }
     for(k=-1;k<=1;k+=2){
         uint32_t col=k>0?0xffffa342:0xff39a6ff;float end=k*ARENA_Z;
-        floor_strip(0,end-k*12,GOAL_W+5,.10f,.035f,col);
-        floor_strip(-GOAL_W-5,end-k*6,.10f,6,.035f,col);
-        floor_strip(GOAL_W+5,end-k*6,.10f,6,.035f,col);
-        floor_rect(0,end-k*.15f,GOAL_W+5,.10f,col);
+        neon_strip(v(-GOAL_W-5,0,end-k*12),v(GOAL_W+5,0,end-k*12),v(0,0,1),.20f,1,3,col,0,0);
+        neon_strip(v(-GOAL_W-5,0,end-k*12),v(-GOAL_W-5,0,end),v(1,0,0),.20f,1,2,col,0,0);
+        neon_strip(v(GOAL_W+5,0,end-k*12),v(GOAL_W+5,0,end),v(1,0,0),.20f,1,2,col,0,0);
+        neon_strip(v(-GOAL_W-5,0,end-k*.15f),v(GOAL_W+5,0,end-k*.15f),v(0,0,1),.20f,1,3,col,0,0);
     }
     /* Opaque floor silhouettes avoid a translucent pass. */
     floor_strip(g->ball.x,g->ball.z,BALL_R*.85f,BALL_R*.85f,.06f,0xff020308);
@@ -714,8 +753,8 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
                 float t0=(float)j/pieces,t1=(float)(j+1)/pieces;
                 Vec3 w0=add(a,mul(sub(b,a),t0)),w1=add(a,mul(sub(b,a),t1));
                 uint32_t col=neon_at((w0.z+w1.z)*.5f);
-                w0.y=w1.y=4;quad(w0,w1,v(w1.x,4.22f,w1.z),v(w0.x,4.22f,w0.z),col);
-                w0.y=w1.y=WALL_TOP-.35f;quad(w0,w1,v(w1.x,WALL_TOP,w1.z),v(w0.x,WALL_TOP,w0.z),col);
+                w0.y=w1.y=4;neon_strip(w0,w1,v(0,1,0),.22f,0,1,col,0,0);
+                w0.y=w1.y=WALL_TOP;neon_strip(w0,w1,v(0,-1,0),.35f,0,1,col,0,0);
             }
             a.y=b.y=BANK_H;
             at=a;bt=b;at.y=bt.y=4;quad(a,b,bt,at,0xff0b1020);
@@ -754,12 +793,12 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
         /* Glowing slats on the back of the net and a big neon frame with
            stacked chevrons on the end wall, just outside the playing surface. */
         {int slat;float face=end+k*3.78f;
-            for(slat=1;slat<=3;slat++){float y=slat*GOAL_H/4;quad(v(-GOAL_W+.3f,y,face),v(GOAL_W-.3f,y,face),v(GOAL_W-.3f,y+.16f,face),v(-GOAL_W+.3f,y+.16f,face),shade(col,.75f));}
+            for(slat=1;slat<=3;slat++){float y=slat*GOAL_H/4;neon_strip(v(-GOAL_W+.3f,y,face),v(GOAL_W-.3f,y,face),v(0,1,0),.16f,0,2,shade(col,.75f),0,0);}
             face=k*(ARENA_Z+.45f);
             {float fx=GOAL_W+2.4f,fy=GOAL_H+2.4f;
-                quad(v(-fx,BANK_H,face),v(-fx+.35f,BANK_H,face),v(-fx+.35f,fy,face),v(-fx,fy,face),col);
-                quad(v(fx-.35f,BANK_H,face),v(fx,BANK_H,face),v(fx,fy,face),v(fx-.35f,fy,face),col);
-                quad(v(-fx,fy-.35f,face),v(fx,fy-.35f,face),v(fx,fy,face),v(-fx,fy,face),col);
+                neon_strip(v(-fx,BANK_H,face),v(-fx,fy,face),v(1,0,0),.35f,0,2,col,0,0);
+                neon_strip(v(fx,BANK_H,face),v(fx,fy,face),v(-1,0,0),.35f,0,2,col,0,0);
+                neon_strip(v(-fx,fy,face),v(fx,fy,face),v(0,-1,0),.35f,0,3,col,0,0);
                 {int c2;for(c2=0;c2<3;c2++){
                     float base=fy+2.2f+c2*2.6f,peak=base+2.2f;uint32_t cc=shade(col,1-c2*.25f);
                     quad(v(-5,base,face),v(-4.3f,base,face),v(.35f,peak,face),v(-.35f,peak,face),cc);

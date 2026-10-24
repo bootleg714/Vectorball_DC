@@ -1,3 +1,16 @@
+# Resume here — neon line dropout fix, October 23, 2026
+
+After the depth-ALWAYS fix the user still saw lines blink: distant lines invisible until they drove closer, then on/off (hardware screenshots show dotted far lines). Not z-fighting this time: the lines were 0.10–0.35 units wide, i.e. thinner than a pixel at distance, and the PVR (no anti-aliasing) only fills pixels whose centres a triangle covers, so sub-pixel strips drop in and out as the camera moves.
+
+- `neon_width(p,t,n,base)` returns the width needed for the strip to be NEON_MIN_PIXELS (1.6) thick on screen: it projects p, p+n*e and p+t*e and measures the across-strip pixel distance perpendicular to the strip's own screen direction (a 3D angle estimate was tried first and gave only 1.0 px off-centre). Never below the design width; capped at NEON_MAX_WIDTH 6.
+- `neon_strip()` draws a line as tapered pieces with per-end widths, adaptively halving any piece whose midpoint needs >12% more width than its ends give (max 3 levels, max 48 pieces). `neon_ring()` does the same for the centre ring. Halo = max(design halo, 2.4x core).
+- Applied to everything thin in the single-screen dress: grid, midfield line, centre ring and hexagon, goal-area lines and goal lines, bank toe lines, wall neon band and top rail, net slats, end-wall goal frames, terrace lips. Chevrons and filled shapes were already wide enough.
+- Check (scratch harness, render.c instrumented): 2,000 random cameras, 290,274 widened pieces; thinnest mid-piece 1.22 px, none below 1.2 px. Before adaptive splitting 0.30% fell below 1.2 px (thinnest 0.81).
+- Triangles: single-screen kickoff 5911 (was 5649 with fixed-width lines; original grass arena 5016), 702 in the depth-ALWAYS run; corner snapshot 2666. Versus hash fixture unchanged (1,341,200 triangles, same hash, 0 flagged). Full suite 33 PASS.
+- Hardware confirmation pending.
+
+---
+
 # Resume here — neon arena floor-line flicker fix, October 23, 2026
 
 User built the neon-arena branch and likes the arena, but the floor lines flickered quite a bit on hardware (z-fighting: strips only .018–.06 above the floor, reciprocal depth at grazing distance). Fix by draw order rather than larger height offsets:
