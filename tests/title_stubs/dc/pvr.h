@@ -4,7 +4,8 @@
 #include <stdint.h>
 typedef void *pvr_ptr_t;
 typedef struct {int dummy;} pvr_poly_hdr_t;
-typedef struct {struct {int culling;} gen;} pvr_poly_cxt_t;
+typedef struct {struct {int culling;} gen;struct {int comparison,write;} depth;} pvr_poly_cxt_t;
+#define PVR_DEPTHCMP_ALWAYS 7
 typedef struct {int flags;float x,y,z,u,v;uint32_t argb,oargb;} pvr_vertex_t;
 enum {PVR_CMD_VERTEX=0,PVR_CMD_VERTEX_EOL=1,PVR_LIST_OP_POLY=0,PVR_CULLING_NONE=0,PVR_TXRFMT_RGB565=1,PVR_TXRFMT_NONTWIDDLED=2,PVR_FILTER_BILINEAR=1};
 typedef struct {int opb_sizes[5],vertex_buf_size,opb_overflow_count;} pvr_init_params_t;

@@ -1,3 +1,15 @@
+# Resume here — neon arena floor-line flicker fix, October 23, 2026
+
+User built the neon-arena branch and likes the arena, but the floor lines flickered quite a bit on hardware (z-fighting: strips only .018–.06 above the floor, reciprocal depth at grazing distance). Fix by draw order rather than larger height offsets:
+
+- Single screen only: straight after the floor tiles, every floor marking (grid, goal-area tints and outlines, goal lines, midfield line, centre ring/hexagon/chevrons, bank toe lines, car/ball shadows) is drawn in one run with `render_depth_always=1`. Then banks, walls, goals, cars, ball and effects draw with the normal header and still depth-test against the markings, so they cover them.
+- `main.c` compiles a second opaque header (`decal_header`, `PVR_DEPTHCMP_ALWAYS`, depth write on) and `backend_triangle` switches headers only when the flag changes (resets to the normal header each frame). Same OP list, so no extra list or bin config. The opaque list is processed in submission order, so depth-ALWAYS markings simply paint over the tiles.
+- Safe because the camera stays inside the convex arena footprint: no environment geometry drawn before the floor can sit in front of a floor marking. The goal floor rect inside each goal stays in the normal pass (nothing beneath it to fight).
+- Versus: flag never set; the 400-frame split hash fixture still gives 1,341,200 triangles, identical hash, 0 flagged triangles. Host test stubs gained `render_depth_always` (three loop tests that replace render.c) and `depth`/`PVR_DEPTHCMP_ALWAYS` in tests/title_stubs/dc/pvr.h. Full suite passes (33 PASS lines); kickoff 5649 triangles, 538 of them in the depth-always run.
+- Host renders with a reference rasteriser that honours depth-ALWAYS for flagged triangles show correct layering (cars/ball/banks/goals over markings). Hardware confirmation of the flicker fix still needed.
+
+---
+
 # Resume here — neon vector arena (single screen), October 23, 2026
 
 User asked to spice up the generic test arena and chose a "neon vector arena" look. Mid-task they added: **leave the versus (split-screen) arena as is — it runs 34–39 FPS on hardware.** So every change is single-screen only (`viewport_height==480`); split views take the exact previous code paths and colours.

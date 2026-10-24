@@ -35,6 +35,7 @@ void pvr_list_finish(void){}
 void pvr_scene_finish(void){if(++frame==(int)(sizeof(sequence)/sizeof(sequence[0])))longjmp(finished,1);}
 void camera_update(Camera *c,const Game *g,int b,float dt,int snap){(void)c;(void)g;(void)b;(void)dt;(void)snap;}
 void camera_update_player(Camera *c,const Game *g,int player,int b,float dt,int snap){(void)player;camera_update(c,g,b,dt,snap);}
+int render_depth_always; /* stands in for render.c's definition */
 void render_split_fps(float fps){(void)fps;}
 void render_split_frame(const Game *g,const Camera cameras[2],const Match *m,const int modes[2],int paused,int missing){(void)g;(void)cameras;(void)m;(void)modes;(void)paused;(void)missing;assert(0);}
 void render_frame(const Game *g,const Camera *c,int paused,int b){

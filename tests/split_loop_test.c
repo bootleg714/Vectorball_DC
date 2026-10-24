@@ -41,6 +41,7 @@ void pvr_list_finish(void){}
 void pvr_scene_finish(void){if(++frame==(int)(sizeof(blue_buttons)/sizeof(blue_buttons[0])))longjmp(finished,1);}
 void camera_update(Camera *c,const Game *g,int b,float dt,int snap){(void)c;(void)g;(void)b;(void)dt;(void)snap;}
 void camera_update_player(Camera *c,const Game *g,int player,int b,float dt,int snap){assert(player==1);camera_update(c,g,b,dt,snap);}
+int render_depth_always; /* stands in for render.c's definition */
 void render_split_fps(float fps){
     if(clock_step==250&&frame==7)assert(fps>3.9f&&fps<4.1f);
     if(frame==9||frame==12||frame==14||frame==16)assert(fps==0);

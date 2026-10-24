@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <string.h>
 static Camera cam;
+/* Read by the Dreamcast backend: while set, triangles use a depth-ALWAYS header.
+   Floor markings are drawn right after the floor tiles in this mode, so they can
+   never z-fight the floor; everything drawn later still depth-tests against them. */
+int render_depth_always;
 static int viewport_top,viewport_height=480,split_player;
 static float split_focal,frustum_x,frustum_y,sphere_x,sphere_y;
 static float hud_depth;
@@ -615,8 +619,12 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
         if(viewport_height<480)quad(v(x0,0,z0),v(x1,0,z0),v(x1,0,z1),v(x0,0,z1),((x+z)&1)?0xff214c40:0xff285647);
         else quad(v(x0,0,z0),v(x1,0,z0),v(x1,0,z1),v(x0,0,z1),z0<0?(((x+z)&1)?0xff071028:0xff09142f):(((x+z)&1)?0xff1a0a18:0xff200c1e));
     }
-    /* Glowing vector grid. */
-    if(viewport_height==480){int i,lines_x=12,lines_z=14;
+    /* Single screen: every floor marking, in one depth-ALWAYS run straight after
+       the tiles (painter's order on the floor, no z-fighting). Versus keeps its
+       accepted geometry and order below. */
+    if(viewport_height==480){
+    render_depth_always=1;
+    {int i,lines_x=12,lines_z=14;
         for(i=1;i<lines_x;i++){
             float x=-ARENA_X+i*(2*ARENA_X/lines_x);
             neon_floor_line(x,-ARENA_Z*.5f,.05f,ARENA_Z*.5f,0xff1f4f9c);
@@ -629,18 +637,9 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
         }
     }
     for(k=-1;k<=1;k+=2){
-        float edge=k*ARENA_Z;
-        uint32_t tint=viewport_height<480?(k>0?0xff504631:0xff20465e):(k>0?0xff3c1222:0xff0c1f46);
+        float edge=k*ARENA_Z;uint32_t tint=k>0?0xff3c1222:0xff0c1f46;
         quad(v(-GOAL_W-3,.01f,edge),v(GOAL_W+3,.01f,edge),v(GOAL_W+3,.01f,edge-k*8),v(-GOAL_W-3,.01f,edge-k*8),tint);
     }
-    if(viewport_height<480){
-        floor_rect(0,0,ARENA_X,.10f,0xffc4d7b9);
-        floor_rect(-ARENA_X+1,0,.10f,ARENA_Z-1,0xff397d88);floor_rect(ARENA_X-1,0,.10f,ARENA_Z-1,0xff397d88);
-        for(k=0;k<32;k+=2){
-            float a=k*6.2831853f/32,b=(k+2)*6.2831853f/32;
-            quad(v(sinf(a)*10,.04f,cosf(a)*10),v(sinf(b)*10,.04f,cosf(b)*10),v(sinf(b)*10.15f,.04f,cosf(b)*10.15f),v(sinf(a)*10.15f,.04f,cosf(a)*10.15f),0xffa0c5b0);
-        }
-    }else{
     /* Midfield line and centre emblem: ring, hexagon and two team chevrons. */
     floor_strip(0,0,ARENA_X,.55f,.03f,0xff4a1a5e);
     floor_strip(0,0,ARENA_X,.12f,.04f,0xfff4eaff);
@@ -657,6 +656,45 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
             quad(v(3.0f,.055f,back),v(2.2f,.055f,back),v(-.4f,.055f,tip),v(.4f,.055f,tip),col);
         }
     }
+    /* Neon toe line where the pitch meets each bank, colour by position. */
+    for(k=0;k<ARENA_EDGES;k++){
+        Vec3 a,b,toe0,toe1,inward;float len;int pieces,j;
+        arena_edge(k,&a,&b);toe0=arena_bank_vertex(k,0,0);toe1=arena_bank_vertex(k,1,0);inward=norm(v(toe0.x-a.x,0,toe0.z-a.z));
+        len=sqrtf((b.x-a.x)*(b.x-a.x)+(b.z-a.z)*(b.z-a.z));pieces=(int)(len/24)+1;
+        for(j=0;j<pieces;j++){
+            float t0=(float)j/pieces,t1=(float)(j+1)/pieces;
+            Vec3 p0=add(toe0,mul(sub(toe1,toe0),t0)),p1=add(toe0,mul(sub(toe1,toe0),t1));
+            uint32_t col=neon_at((a.z+(b.z-a.z)*(t0+t1)*.5f));
+            floor_band(p0,p1,inward,.85f,.03f,shade(col,.3f));
+            floor_band(p0,p1,inward,.22f,.04f,col);
+        }
+    }
+    for(k=-1;k<=1;k+=2){
+        uint32_t col=k>0?0xffffa342:0xff39a6ff;float end=k*ARENA_Z;
+        floor_strip(0,end-k*12,GOAL_W+5,.10f,.035f,col);
+        floor_strip(-GOAL_W-5,end-k*6,.10f,6,.035f,col);
+        floor_strip(GOAL_W+5,end-k*6,.10f,6,.035f,col);
+        floor_rect(0,end-k*.15f,GOAL_W+5,.10f,col);
+    }
+    /* Opaque floor silhouettes avoid a translucent pass. */
+    floor_strip(g->ball.x,g->ball.z,BALL_R*.85f,BALL_R*.85f,.06f,0xff020308);
+    floor_strip(g->car.x,g->car.z,1.7f,2.2f,.06f,0xff020308);
+    if(g->cpu_enabled)floor_strip(g->cpu.x,g->cpu.z,1.7f,2.2f,.06f,0xff020308);
+    render_depth_always=0;
+    }
+    for(k=-1;k<=1;k+=2){
+        float edge=k*ARENA_Z;
+        uint32_t tint=k>0?0xff504631:0xff20465e;
+        if(viewport_height==480)break;
+        quad(v(-GOAL_W-3,.01f,edge),v(GOAL_W+3,.01f,edge),v(GOAL_W+3,.01f,edge-k*8),v(-GOAL_W-3,.01f,edge-k*8),tint);
+    }
+    if(viewport_height<480){
+        floor_rect(0,0,ARENA_X,.10f,0xffc4d7b9);
+        floor_rect(-ARENA_X+1,0,.10f,ARENA_Z-1,0xff397d88);floor_rect(ARENA_X-1,0,.10f,ARENA_Z-1,0xff397d88);
+        for(k=0;k<32;k+=2){
+            float a=k*6.2831853f/32,b=(k+2)*6.2831853f/32;
+            quad(v(sinf(a)*10,.04f,cosf(a)*10),v(sinf(b)*10,.04f,cosf(b)*10),v(sinf(b)*10.15f,.04f,cosf(b)*10.15f),v(sinf(a)*10.15f,.04f,cosf(a)*10.15f),0xffa0c5b0);
+        }
     }
     /* Shared boundary vertices keep the visible banks and rounded walls aligned. */
     for(k=0;k<ARENA_EDGES;k++){
@@ -669,18 +707,13 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
             a.y=b.y=BANK_H;
             at=a;bt=b;at.y=bt.y=4.15f;quad(a,b,bt,at,0xff223343);
             a.y=b.y=4;quad(a,b,bt,at,0xff39c3d9);
-        }else{/* Neon toe line where the pitch meets the bank, and a neon band on the
-            wall above the bank lip. Long straight edges are split so the
-            colour runs blue -> magenta -> orange along the arena. */
-            Vec3 toe0=arena_bank_vertex(k,0,0),toe1=arena_bank_vertex(k,1,0),inward=norm(v(toe0.x-a.x,0,toe0.z-a.z));
+        }else{/* Neon band on the wall above the bank lip and a neon top rail. Long
+            straight edges are split so the colour runs blue -> magenta -> orange. */
             float len=sqrtf((b.x-a.x)*(b.x-a.x)+(b.z-a.z)*(b.z-a.z));int pieces=(int)(len/24)+1,j;
             for(j=0;j<pieces;j++){
                 float t0=(float)j/pieces,t1=(float)(j+1)/pieces;
-                Vec3 p0=add(toe0,mul(sub(toe1,toe0),t0)),p1=add(toe0,mul(sub(toe1,toe0),t1));
                 Vec3 w0=add(a,mul(sub(b,a),t0)),w1=add(a,mul(sub(b,a),t1));
                 uint32_t col=neon_at((w0.z+w1.z)*.5f);
-                floor_band(p0,p1,inward,.85f,.03f,shade(col,.3f));
-                floor_band(p0,p1,inward,.22f,.04f,col);
                 w0.y=w1.y=4;quad(w0,w1,v(w1.x,4.22f,w1.z),v(w0.x,4.22f,w0.z),col);
                 w0.y=w1.y=WALL_TOP-.35f;quad(w0,w1,v(w1.x,WALL_TOP,w1.z),v(w0.x,WALL_TOP,w0.z),col);
             }
@@ -743,20 +776,15 @@ static void render_scene(const Game *g,const Camera *c,int paused,int ball_camer
             floor_rect(0,end-k*12,GOAL_W+5,.10f,0xffa0c5b0);
             floor_rect(-GOAL_W-5,end-k*6,.10f,6,0xffa0c5b0);
             floor_rect(GOAL_W+5,end-k*6,.10f,6,0xffa0c5b0);
-        }else{
-            floor_strip(0,end-k*12,GOAL_W+5,.10f,.035f,col);
-            floor_strip(-GOAL_W-5,end-k*6,.10f,6,.035f,col);
-            floor_strip(GOAL_W+5,end-k*6,.10f,6,.035f,col);
+            floor_rect(0,end-k*.15f,GOAL_W+5,.10f,col);
         }
-        floor_rect(0,end-k*.15f,GOAL_W+5,.10f,col);
     }
     /* Opaque floor silhouettes avoid a translucent pass. */
     if(viewport_height<480){floor_rect(g->ball.x,g->ball.z,BALL_R*.85f,BALL_R*.85f,0xff102426);floor_rect(g->car.x,g->car.z,1.7f,2.2f,0xff102426);}
-    else{floor_strip(g->ball.x,g->ball.z,BALL_R*.85f,BALL_R*.85f,.06f,0xff020308);floor_strip(g->car.x,g->car.z,1.7f,2.2f,.06f,0xff020308);}
     if(visible(add(g->car,v(0,1,0)),5))draw_car(g,0xff248de8);
     if(g->cpu_enabled){
         Game other=*g;other.car=g->cpu;other.heading=g->cpu_heading;other.car_surface=g->cpu_surface;other.velocity=g->cpu_velocity;other.car_visual=g->cpu_visual;other.car_suspension=g->cpu_suspension;other.exhaust=g->cpu_exhaust;
-        if(viewport_height<480)floor_rect(other.car.x,other.car.z,1.7f,2.2f,0xff102426);else floor_strip(other.car.x,other.car.z,1.7f,2.2f,.06f,0xff020308);
+        if(viewport_height<480)floor_rect(other.car.x,other.car.z,1.7f,2.2f,0xff102426);
         if(visible(add(other.car,v(0,1,0)),5))draw_car(&other,0xffff953b);
     }
     if(visible(g->ball,BALL_R))ball(g);

@@ -16,6 +16,9 @@ typedef struct {
 } Camera;
 /* Backend receives clipped, projected triangles. z is reciprocal camera depth. */
 void backend_triangle(Screen a,Screen b,Screen c,uint32_t color);
+/* Set by the renderer around single-screen floor markings; the Dreamcast backend
+   then submits them with a depth-compare ALWAYS header (host backends ignore it). */
+extern int render_depth_always;
 void camera_update(Camera *c,const Game *g,int ball_camera,float dt,int snap);
 void render_match_clock(const Match *m);
 void render_results(const Game *g,int selection,int connected,int artwork);

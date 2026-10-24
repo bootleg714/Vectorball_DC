@@ -7,10 +7,14 @@
 #include "audio.h"
 #include "title_art.h"
 KOS_INIT_FLAGS(INIT_DEFAULT);
-static pvr_poly_hdr_t header;
+static pvr_poly_hdr_t header,decal_header;
+static int header_is_decal;
 void backend_triangle(Screen a,Screen b,Screen c,uint32_t col){
     pvr_vertex_t vert;
     Screen p[3]={a,b,c};int i;
+    /* Floor markings: same opaque list, but depth compare ALWAYS so they paint over
+       the floor tiles drawn just before them instead of z-fighting at a distance. */
+    if(render_depth_always!=header_is_decal){header_is_decal=render_depth_always;pvr_prim(header_is_decal?&decal_header:&header,sizeof(header));}
     for(i=0;i<3;i++){
         vert.flags=i==2?PVR_CMD_VERTEX_EOL:PVR_CMD_VERTEX;
         vert.x=p[i].x;vert.y=p[i].y;vert.z=p[i].z;
@@ -74,6 +78,8 @@ int main(int argc,char **argv){
     pvr_poly_cxt_col(&context,PVR_LIST_OP_POLY);
     context.gen.culling=PVR_CULLING_NONE;
     pvr_poly_compile(&header,&context);
+    context.depth.comparison=PVR_DEPTHCMP_ALWAYS;
+    pvr_poly_compile(&decal_header,&context);
     audio_init();
     frontend_init(&front);title_prepare();game_init(&g);match_init(&match);camera_update(&camera,&g,0,0,1);last=timer_ms_gettime64();
     for(;;){
@@ -129,7 +135,7 @@ int main(int argc,char **argv){
         }else{accumulator=0;audio_update(&g,in,1,dt);}
         pvr_wait_ready();pvr_scene_begin();pvr_list_begin(PVR_LIST_OP_POLY);
         if(front.page!=FRONT_MATCH&&title_texture)title_draw();
-        pvr_prim(&header,sizeof(header));
+        pvr_prim(&header,sizeof(header));header_is_decal=0;
         if(front.page==FRONT_MATCH){
             if(front.two_player){Camera cameras[2]={camera,camera2};int modes[2]={ball_camera,ball_camera2};render_split_frame(&g,cameras,&match,modes,paused,missing);render_split_fps(paused||missing?0:fps);}
             else {render_frame(&g,&camera,paused||missing,ball_camera);render_match_clock(&match);}
