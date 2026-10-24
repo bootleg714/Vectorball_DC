@@ -1,0 +1,7 @@
+# Build outputs (rebuild with `make gdemu`)
+*.o
+*.elf
+*.bin
+*.BIN
+*.cdi
+gdemu/
