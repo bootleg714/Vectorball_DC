@@ -1,3 +1,25 @@
+# Resume here — neon vector arena (single screen), October 23, 2026
+
+User asked to spice up the generic test arena and chose a "neon vector arena" look. Mid-task they added: **leave the versus (split-screen) arena as is — it runs 34–39 FPS on hardware.** So every change is single-screen only (`viewport_height==480`); split views take the exact previous code paths and colours.
+
+Render-only change in `src/render.c`; no gameplay, physics, collision, camera or HUD changes. Still one opaque PVR list, flat colours, no textures or translucency. Glow is faked with a bright thin core strip over a wider dim halo strip.
+
+- Pitch: dark team-tinted halves (navy at the blue end, -z; plum at the orange end, +z) on the same 8x14 tiles.
+- Glowing vector grid: 11 long lines (blue/orange per half) and 13 cross lines, core plus halo.
+- Midfield line and centre emblem: white core over a purple halo, a glowing ring, a cyan hexagon and two team chevrons pointing at the goal each team attacks.
+- Banks: dark steel, lighter towards the lip. A neon toe line where pitch meets bank, a neon band on the wall above the lip and a neon top rail. Long edges are split so the colour runs blue -> magenta -> orange along the arena (`neon_at(z)`). Fence wires recoloured.
+- Goals: darker team-tinted nets with three glowing slats, team-coloured goal-area outlines, and a big neon frame with three stacked chevrons on the end wall just outside the playing surface (z = ±(ARENA_Z+.45), behind the bank).
+- Sky and city: purple horizon gradient, a striped synthwave sun low behind the orange end (replaces the moon), darker buildings with magenta/cyan windows, neon lips on the terraces, team-coloured spire tops. Car/ball floor shadows darker to suit the dark pitch.
+
+Host evidence (no Dreamcast compiler/emulator here; no hardware FPS claim):
+- Split screen unchanged: a 400-frame versus hash fixture (8 car/ball/camera layouts, pause overlay, FPS label) submits 1,341,200 triangles with an identical FNV-1a hash of every vertex and colour on the old (4ad39a2) and new render.c.
+- Full strict `tests/run.sh` passes (33 PASS lines, same as before). Single-screen kickoff snapshot 5016 -> 5649 triangles (+633, ~13%); corner snapshot 2534 -> 2654. Other single views: centre 3695 -> 4202, side 3634 -> 4162, goal 3155 -> 3448.
+- `NEON_ARENA_PREVIEW.png`: host software renders (kickoff, overview, goal, centre). Host rasteriser aliasing makes thin lines look dashed at a distance; hardware should draw them solid.
+
+Hardware test: single-player/CPU matches on GDEMU/Redream — check the look, readability of the ball and cars against the dark pitch, that no strips flicker against the floor (they sit .018–.06 above it), and single-screen FPS. Versus should look and run exactly as before.
+
+---
+
 # Resume here — v0.32 wheel contact during rollback candidate, October 23, 2026
 
 User clarified v0.31 “kinda worked” but the car falls off at the top; wants skateboard-like movement with wheels staying on the wall while sliding down, even with gas floored. v0.30 remains accepted hardware baseline. v0.31 was a partially successful trial, not accepted for contact feel. v0.32 is host-tested and awaits their real hardware test. No target compiler/emulator here and no ELF/CDI supplied.
