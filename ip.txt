@@ -1,0 +1,9 @@
+Device Info   : CD-ROM1/1
+Area Symbols  : JUE
+Peripherals   : E000F10
+Product No    : T0000
+Version       : V0.100
+Release Date  : 20261022
+Boot Filename : 1ST_READ.BIN
+SW Maker Name : VECTORBALL TEAM
+Game Title    : VECTORBALL DC

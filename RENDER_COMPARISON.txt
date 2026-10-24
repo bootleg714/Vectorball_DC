@@ -1,0 +1,12 @@
+Native host renderer comparison (not Dreamcast FPS)
+
+Same 240 scripted split frames, four camera/position fixtures, same current Game data, original v0.24 renderer vs v0.26 lean renderer, -std=c99 -O2 with minimal CPU backend.
+Five interleaved runs; CPU process time median. No emulator or PVR hardware involved.
+
+v0.24: runs [214.15, 204.55, 208.86, 205.87, 212.9] ms; median 208.86 ms
+240 split frames (4 fixtures), native CPU 212.90 ms, kickoff 8118 triangles, last frame 8020 triangles, sink 1011.698; NOT target FPS
+
+v0.26: runs [34.69, 32.83, 37.19, 33.5, 33.62] ms; median 33.62 ms
+240 split frames (4 fixtures), native CPU 33.62 ms, kickoff 2979 triangles, last frame 2933 triangles, sink 367.700; NOT target FPS
+
+The output differs intentionally: lean meshes, scenery and HUD batching. These timings do not predict hardware speed or a target FPS.

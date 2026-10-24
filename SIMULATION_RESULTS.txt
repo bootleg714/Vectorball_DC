@@ -1,0 +1,64 @@
+v0.30 portable host suite; no target/emulator/hardware test.
+Command: sh tests/run.sh
+
+PASS: 8968 distinct monotonic frontal shot angles across both cars/four headings; 5-degree contact -> 3.25-degree shot, mirrored aiming, unchanged impulse strength, center/side/rear response
+PASS: 16 player/direction/heading flips, inverted midpoint/upright completion <=0.91s, held steering priority, landing/recharge/reset; +10% ordinary hits, single +15% flip hit, separating/rotating swat and ball cap
+PASS: both players/directions roll 7.50 rad/s, >one rotation in 1s, release below .15 rad/s in .2s and counter-roll; slow yaw unchanged, normal/boost radii 20.64/54.91 (v0.27 radii retained); speed caps +10% 37.39/61.00
+PASS: single extra edge-triggered hop, no held repeat/third/fall hop, 6.81 peak, landing recharge, physical flip/air-roll/wall paths, independent P2 hop/recovery and reset
+PASS: real controller vertical-stick forward/back flips for both players at 120/30/15fps input cadence, stick priority over opposite trigger, deadzone and D-pad direction
+PASS: actual two-pad loop: versus selection, independent triggers/cameras, P2 pause/P1 resume, A/B-port disconnect freezes without reassignment, shared reset/title/restart, held-button isolation, own-car reverse/braking, texture lifecycle/fallback
+RENDER COUNTS kickoff: accepted-style single 5086, two views total 3082 (top 1508 bottom 1572); not FPS
+PASS: two neutral/human motors, mirrored acceleration, independent boost/jump, orange ball contact, shared car collisions, versus overtime/results, independent camera frames, clipped read-only viewports/no state leakage and 10-minute two-input stress without AI
+PASS: 360 resting side/roof recovery fixtures across headings/directions, worst 0.76s; both airborne roll directions, release braking, held-B no repeat, no aerial recovery jump and reset state
+PASS: actual main-loop accelerated match expiry, results score, A/Start rematches, fresh clock/scores, Title/B exits, held-button isolation and results texture lifecycle/fallback
+PASS: exact 36,000-tick regulation, identical active physics, goal-clock freeze, tied overtime kickoff, elapsed OT, sudden-death celebration/results, regulation/final-tick winner/equalizer, reset behavior, frozen finish, result actions and finite clock/result UI
+PASS: actual main-loop title/controls/start/pause/return/restart, A/Start hold isolation, silent menus, controller absence, texture upload/free and allocation-failure fallback
+PASS: menu navigation, one step per stick deflection, disconnected controller, Start/Controls/back/return flow and finite on-screen UI geometry
+PASS: both real scoring paths, scorer-colored 3-burst fireworks, 108-triangle bound in unclipped view, full lifetime, frame-clear/pause/read-only rendering, near-plane clipping and unchanged kickoff/reset score
+PASS: boost exhaust throttle/speed response, immediate release/brake/reverse/empty/depletion cut, aerial/CPU operation, bounded fixed-tick pulse, reset/goal clear and 24 finite read-only triangles per boosting car
+PASS: real ground/aerial/CPU contact, separating/soft touches, no wall spark, strongest substep event, lifetime/frame-clear/reset/goal handling, fixed four-spark pool and <=32 finite read-only VFX triangles
+PASS: mirrored bounded turn lean, acceleration/brake pitch, landing compression -0.0261/rebound 0.0035 and settling, wall fade, fixed physical up/wheel hubs, read-only renderer and goal freeze/reset
+mode0 speed16.00 steer-1: tilt 0.00deg inverted_steps0 peakY0.000
+mode0 speed16.00 steer1: tilt 0.00deg inverted_steps0 peakY0.000
+mode0 speed37.39 steer-1: tilt 0.00deg inverted_steps0 peakY0.000
+mode0 speed37.39 steer1: tilt 0.00deg inverted_steps0 peakY0.000
+mode0 speed61.00 steer-1: tilt 0.00deg inverted_steps0 peakY0.000
+mode0 speed61.00 steer1: tilt 0.00deg inverted_steps0 peakY0.000
+mode1 speed16.00 steer-1: tilt 0.00deg inverted_steps0 peakY0.000
+mode1 speed16.00 steer1: tilt 0.00deg inverted_steps0 peakY0.000
+mode1 speed37.39 steer-1: tilt 22.33deg inverted_steps0 peakY0.450
+mode1 speed37.39 steer1: tilt 22.33deg inverted_steps0 peakY0.450
+mode1 speed61.00 steer-1: tilt 22.36deg inverted_steps0 peakY0.451
+mode1 speed61.00 steer1: tilt 22.36deg inverted_steps0 peakY0.451
+mode2 speed16.00 steer-1: tilt 22.45deg inverted_steps0 peakY0.445
+mode2 speed16.00 steer1: tilt 22.45deg inverted_steps0 peakY0.445
+mode2 speed37.39 steer-1: tilt 22.32deg inverted_steps0 peakY0.449
+mode2 speed37.39 steer1: tilt 22.33deg inverted_steps0 peakY0.449
+mode2 speed61.00 steer-1: tilt 22.37deg inverted_steps0 peakY0.451
+mode2 speed61.00 steer1: tilt 22.37deg inverted_steps0 peakY0.451
+PASS: stationary front-wheel steer, smooth countersteer, signed travel/radius roll, high-speed steer, wall rolling, independent CPU wheels, goal freeze/reset, bounded phase, repeatable read-only finite rendering and unchanged wheel triangle count
+PASS: full/half braking 0.90/1.46s, stopping distance 24.42/37.27; 90-degree turn span slow 7.69 vs boosted 78.88; boost-release carry, brake priority, reverse, tapered pull and analog steering
+PASS: ball radius3.4375 (another +25%), enlarged contact/post clearance; field 197.51x246.88, height 49.38, goals 43.05x15.50, throttle 37.39, boost 61.00, total ball cap 159.12, gravity 15.67, ceiling ball/car contacts, high wall probe, 24 max-speed shots, jump peak 2.84
+PASS: rest, throttle/boost, impact, both goals/reset, posts/crossbar, enlarged interior/wider goal, walls, overlap, 10-minute stability
+PASS: side-bank lift/roll-back, four rounded rebounds, bank driving/jump, corner containment and open goal lanes
+PASS: analytic wheel probes, four force-driven bank/wall climbs, mixed wheel normals, jumps/falls, contact loss, gravity descent/reset; max step rotation 3.81 degrees
+PASS: 8 mirrored 30/45-degree unsteered carves retain entry heading, crest, face down while descending and exit forward; minimum entry lateral 0.430, descending forward.y -0.892, peak 11.83; no forced head-on turn
+PASS: 48 mirrored ascent/crest/descent wall turns, full/35% analog, countersteering and neutral release; minimum signed turn/input 0.273 rad per .4s, max orientation step 2.63 degrees
+PASS: 28 low/medium/high-speed straight/angled approaches, wall steering, rounded corners, release/jump, 12s settling and overturned recovery; max speed 61.00, displacement 0.524/step, spin 16.00 rad/s
+PASS: CPU scored in 10.41s; reset, wrong-side approach, wall escape, bumps and 10-minute two-car stability
+PASS: hop peak 2.84, landing/held button, one double jump/no third hop, airborne shot, car clearance, CPU jump/reset, 10-minute jump match
+PASS: actual jump/landing/hit/goal events and frame clearing
+PCM bank 0: 4096 bytes, peak 15611, RMS 8955
+PCM bank 1: 4416 bytes, peak 21014, RMS 3790
+PCM bank 2: 3520 bytes, peak 10134, RMS 4246
+PCM bank 3: 3968 bytes, peak 20721, RMS 3590
+PCM bank 4: 42336 bytes, peak 18212, RMS 3399
+PASS: bank sizes/headroom, channel ownership, continuous engine/pitch, car-hit loudness/depth/3D attenuation, hit strength/cooldown, pause/resume, single goal/reset
+PASS: ball-camera car framing, overhead/near/wall cases, bounded orbit, 60s moving targets, 2-minute physics match and toggle
+PASS: fixed world geometry stays identical after rendering a tilted car
+snapshot: 5016 triangles with finite coordinates
+snapshot: 2534 triangles with finite coordinates
+PASS: portable renderer compiled and submitted finite triangles
+
+ASan/UBSan passed: aiming_test and scale_speed_test; ASAN_OPTIONS=detect_leaks=0 (LeakSanitizer task inspection unsupported in runner).
+Preview verified:640x480,7.500seconds,20fps offline encode, not measured game FPS.
